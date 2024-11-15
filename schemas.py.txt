@@ -1,0 +1,26 @@
+# app/schemas.py
+from pydantic import BaseModel
+from typing import Optional
+
+class JokeBase(BaseModel):
+    category: str
+    type: str
+    nsfw: bool
+    political: bool
+    sexist: bool
+    safe: bool
+    lang: str
+
+class JokeCreate(JokeBase):
+    joke: Optional[str] = None
+    setup: Optional[str] = None
+    delivery: Optional[str] = None
+
+class Joke(JokeBase):
+    id: int
+    joke: Optional[str] = None
+    setup: Optional[str] = None
+    delivery: Optional[str] = None
+
+    class Config:
+        orm_mode = True

@@ -1,0 +1,62 @@
+# app/main.py
+from fastapi import FastAPI, Depends, HTTPException
+from sqlalchemy.orm import Session
+import httpx
+from .models import Joke as JokeModel
+from .schemas import JokeCreate, Joke
+from .database import database, engine
+import sqlalchemy
+
+app = FastAPI()
+
+# Dependency to get DB session
+def get_db():
+    db = database
+    try:
+        yield db
+    finally:
+        pass
+
+# Helper function to fetch jokes from the external API
+async def fetch_jokes_from_api():
+    url = "https://v2.jokeapi.dev/joke/Any?amount=100&type=twopart,single"
+    async with httpx.AsyncClient() as client:
+        response = await client.get(url)
+        if response.status_code != 200:
+            raise HTTPException(status_code=500, detail="Error fetching jokes from JokeAPI")
+        return response.json()
+
+# Route to fetch and store jokes
+@app.on_event("startup")
+async def fetch_and_store_jokes():
+    jokes_data = await fetch_jokes_from_api()
+    jokes_to_insert = []
+    
+    for joke in jokes_data.get('jokes', []):
+        joke_entry = JokeCreate(
+            category=joke.get('category', ''),
+            type=joke.get('type', ''),
+            nsfw=joke.get('flags', {}).get('nsfw', False),
+            political=joke.get('flags', {}).get('political', False),
+            sexist=joke.get('flags', {}).get('sexist', False),
+            safe=joke.get('safe', True),
+            lang=joke.get('lang', 'en'),
+            joke=joke.get('joke') if joke.get('type') == 'single' else None,
+            setup=joke.get('setup') if joke.get('type') == 'twopart' else None,
+            delivery=joke.get('delivery') if joke.get('type') == 'twopart' else None
+        )
+        jokes_to_insert.append(joke_entry)
+    
+    # Insert the jokes into the database
+    db = database
+    query = """
+    INSERT INTO jokes (category, type, joke, setup, delivery, nsfw, political, sexist, safe, lang)
+    VALUES (:category, :type, :joke, :setup, :delivery, :nsfw, :political, :sexist, :safe, :lang)
+    """
+    await db.execute(query, values=[j.dict() for j in jokes_to_insert])
+
+# Route to fetch all jokes from the database
+@app.get("/jokes/", response_model=list[Joke])
+async def get_jokes(db: Session = Depends(get_db)):
+    jokes = db.query(JokeModel).all()
+    return jokes

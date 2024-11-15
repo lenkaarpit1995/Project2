@@ -1,0 +1,15 @@
+# app/database.py
+from databases import Database
+import sqlalchemy
+
+DATABASE_URL = "postgresql://user:password@localhost/dbname"  # Adjust with your DB details
+
+database = Database(DATABASE_URL)
+metadata = sqlalchemy.MetaData()
+
+# Create the database engine
+engine = sqlalchemy.create_engine(DATABASE_URL)
+
+# Create tables if not exists
+from .models import Base
+Base.metadata.create_all(bind=engine)
